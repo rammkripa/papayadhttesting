@@ -20,49 +20,54 @@ def parse_arguments():
     # Optional arguments
     parser.add_argument("-i", "--ip", help="IP address of existing node", type=str, default=None)
     parser.add_argument("-p", "--port", help="port number of existing node", type=int, default=None)
+    parser.add_argument("-pp", "--presentport", help="port number of present node", type=int, default=None)
 
     return parser.parse_args()
 
 
-def connect_to_bootstrap_node(args):
-    loop = asyncio.get_event_loop()
-    loop.set_debug(True)
-
-    loop.run_until_complete(server.listen(8410))
+def connect_to_bootstrap_node(loop, args):
+    loop.run_until_complete(server.listen(args.presentport))
     bootstrap_node = (args.ip, int(args.port))
     loop.run_until_complete(server.bootstrap([bootstrap_node]))
 
-    try:
-        loop.run_forever()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        server.stop()
-        loop.close()
+def create_bootstrap_node(loop, args):
+    loop.run_until_complete(server.listen(args.presentport))
 
+def put(loop, key, value) :
+    loop.run_until_complete(server.set(key, value))
 
-def create_bootstrap_node():
+def get(loop, key) :
+    return loop.run_until_complete(server.get(key))
+
+def main():
+    
+    args = parse_arguments()
     loop = asyncio.get_event_loop()
     loop.set_debug(True)
 
-    loop.run_until_complete(server.listen(8468))
-
+    if args.ip and args.port:
+        connect_to_bootstrap_node(loop, args)
+    else:
+        create_bootstrap_node(loop, args)
+    
+    key = input('Input a key : ')
+    value = input('Input a value : ')
+    
+    if key and value:
+        put(loop, key, value)
+        
+    get_key = input('Enter key to get : ')
+    
+    if get_key :
+        print('Got value: ', get(get_key))
+        
     try:
         loop.run_forever()
     except KeyboardInterrupt:
         pass
     finally:
         server.stop()
-        loop.close()
-
-
-def main():
-    args = parse_arguments()
-
-    if args.ip and args.port:
-        connect_to_bootstrap_node(args)
-    else:
-        create_bootstrap_node()
+        loop.close() 
 
 
 if __name__ == "__main__":
