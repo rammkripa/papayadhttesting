@@ -7,6 +7,7 @@ from papayaclientdistributed import PapayaClientDistributed
 import torch 
 import torchvision
 from model import TheModel
+import numpy as np
 
 
 from kademlia.network import Server
@@ -51,7 +52,8 @@ def get(loop, key) :
     return loop.run_until_complete(server.get(key))
 
 def bytes_to_state_dict(raw_bytes) :
-    return raw_bytes
+    buffer = io.BytesIO(raw_bytes)
+    return torch.load(buffer)
     
 def main():
     
@@ -91,7 +93,7 @@ def main():
                                             model_class = TheModel,
                                             loss_fn = torch.nn.MSELoss)
             i+=1
-        num_epochs_total = 100
+        num_epochs_total = 20
         num_epochs_per_swap = 5
         num_times = (num_epochs_total // num_epochs_per_swap)
         key = args.ip + "X" + str(args.presentport)
@@ -124,22 +126,29 @@ def main():
                 # LATER: select random sample of keys
                 #num_to_select = 3
                 #partners = random.sample(keys, num_to_select)
+                print(str(keys) + " is keyz")
                 partners = keys
                 client.current_partners = {}
                 for partner_key in partners :
                     client.current_partners[partner_key] = bytes_to_state_dict(get(loop, partner_key))
-                for i in range(0, 4) :
+                for j in range(0, 4) :
+                    randomthing = j + 2
                     client.update_partner_weights()
                     client.average_partners()
             
-            ## PRINT THE WHOLE HASH TABLE
+            ## PRINT THE WHOLE HASH TABLE of neighbours
             print(" PRINTING NEIGHBOURS ")
             for i in server.bootstrappable_neighbors() :
                 ip2 = i[0]
                 port2 = i[1]
                 print (ip2 + " is ip and port is " + str(port2))
-                
-        print(client.logs['stringy'][99])
+        ## MEASURE ACCURACY WRT TEST SET
+        accuracies_node = []
+        with torch.no_grad():
+            for batchno, (ex_data, ex_labels) in enumerate(test_loader) :
+                accuracies_node.append(((client.model.forward(ex_data).round() == ex_labels).float().mean()).item())
+        print('mean accuracy is ' + str(np.array(accuracies_node).mean()))
+        #print(client.model.state_dict())
         
     else:
         create_bootstrap_node(loop, args)

@@ -63,7 +63,7 @@ class PapayaClientDistributed:
         num_samples = self.data.shape[0]
         num_batches = math.ceil(num_samples / self.batch_size)
         last_loss = 0
-        current_optimizer = self.optimizer(self.model.parameters(), lr=0.01)
+        current_optimizer = self.optimizer(self.model.parameters(), lr=0.001)
         ######################
         ### TRAINING LOOP ####
         ######################
@@ -78,6 +78,7 @@ class PapayaClientDistributed:
             last_loss = curr_loss.item()
             curr_loss.backward()
             current_optimizer.step()
+            #print(last_loss)
         #######################
         ### LOGGING ###########
         #######################
@@ -160,6 +161,7 @@ class PapayaClientDistributed:
         for p in self.current_partners.keys() :
             weights[p] = self.partner_weight_manager.get_weight(p).item()
         # Calculate weight sum for doing the parameter averaging
+        print(weights)
         weight_sum = sum(list(weights.values()))
         sd_curr = self.model.state_dict()
         for key in sd_curr :
