@@ -1,3 +1,4 @@
+import io
 import argparse
 import logging
 import asyncio
@@ -48,6 +49,9 @@ def put(loop, key, value) :
 
 def get(loop, key) :
     return loop.run_until_complete(server.get(key))
+
+def bytes_to_state_dict(raw_bytes) :
+    return raw_bytes
     
 def main():
     
@@ -81,11 +85,11 @@ def main():
         for batchno, (ex_data, ex_labels) in enumerate(train_loader):
             if i == args.partnernumber :
                 client = PapayaClientDistributed(dat = ex_data,
-                                            labs = ex_labels,
+                                            labs = ex_labels.float(),
                                             batch_sz = 500,
                                             num_partners = args.numpartners,
                                             model_class = TheModel,
-                                            loss_fn = torch.nn.CrossEntropyLoss)
+                                            loss_fn = torch.nn.MSELoss)
             i+=1
         num_epochs_total = 100
         num_epochs_per_swap = 5
@@ -101,7 +105,9 @@ def main():
                 client.model_train_epoch()
                 
             # Put model state dict in hash table
-            put(loop, key, client.model.state_dict())
+            bytesbuffer = io.BytesIO()
+            torch.save(client.model.state_dict(), bytesbuffer)
+            put(loop, key, bytesbuffer.getvalue())
             
             #############################
             ###### partner averaging ####
@@ -112,16 +118,19 @@ def main():
                 for i in server.bootstrappable_neighbors() :
                     ip2 = i[0]
                     port2 = i[1]
-                    keys.append(str(ip2) + "X" + str(port2))
-                # select random sample of keys
-                num_to_select = 3
-                partners = random.sample(keys, num_to_select)
+                    if ip2 != args.ip and port2 != args.port :
+                        keys.append(str(ip2) + "X" + str(port2))
+                        print(str(ip2) + "X" + str(port2))
+                # LATER: select random sample of keys
+                #num_to_select = 3
+                #partners = random.sample(keys, num_to_select)
+                partners = keys
                 client.current_partners = {}
                 for partner_key in partners :
-                    client.current_partners[partner_key] = get(loop, partner_key)
+                    client.current_partners[partner_key] = bytes_to_state_dict(get(loop, partner_key))
                 for i in range(0, 4) :
                     client.update_partner_weights()
-                    n.average_partners()
+                    client.average_partners()
             
             ## PRINT THE WHOLE HASH TABLE
             print(" PRINTING NEIGHBOURS ")
