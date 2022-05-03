@@ -2,6 +2,11 @@ import argparse
 import logging
 import asyncio
 import socket
+from papayaclientdistributed import PapayaClientDistributed
+import torch 
+import torchvision
+from model import TheModel
+
 
 from kademlia.network import Server
 
@@ -22,7 +27,8 @@ def parse_arguments():
     parser.add_argument("-i", "--ip", help="IP address of existing node", type=str, default=None)
     parser.add_argument("-p", "--port", help="port number of existing node", type=int, default=None)
     parser.add_argument("-pp", "--presentport", help="port number of present node", type=int, default=None)
-
+    parser.add_argument("-np", "--numpartners", help="number of partners", type=int, default=None)
+    parser.add_argument("-pn", "--partnernumber", help="number of present partner", type=int, default=None)
     return parser.parse_args()
 
 
@@ -51,31 +57,80 @@ def main():
 
     if args.ip and args.port:
         connect_to_bootstrap_node(loop, args)
-        while True :
-            #listen(loop, args)
-            choice = input("Keep adding stuff to the hash table? [y/n]")
-            if choice == 'n' :
-                break
-            value = input('Input a value : ')
-            hostname = socket.gethostname()
-            local_ip = socket.gethostbyname(hostname)
-            key = args.ip + "X" + str(args.presentport)
-            if key and value:
-                put(loop, key, value)
-            ## PRINT THE WHOLE HASH TABLE
+        ####### GRAB THE DATA: TO BE CHANGED
+        
+        mnist_trainset = torchvision.datasets.MNIST(root='./data', train=True, download=True, transform=torchvision.transforms.Compose([
+                               torchvision.transforms.ToTensor(),
+                               torchvision.transforms.Normalize(
+                                 (0.1307,), (0.3081,))
+                             ]))
+        mnist_testset = torchvision.datasets.MNIST(root='./data', train=False, download=True, transform=torchvision.transforms.Compose([
+                               torchvision.transforms.ToTensor(),
+                               torchvision.transforms.Normalize(
+                                 (0.1307,), (0.3081,))
+                             ]))
+        ###########################################
+        ########## Set up for training
+        
+        batch_size_train = 60000 // (args.numpartners + 1)
+        batch_size_test = 500
+        train_loader = torch.utils.data.DataLoader(mnist_trainset,batch_size=batch_size_train, shuffle=True)
+        test_loader = torch.utils.data.DataLoader(mnist_testset,batch_size=batch_size_test, shuffle=True)
+        i = 0
+        client = None
+        for batchno, (ex_data, ex_labels) in enumerate(train_loader):
+            if i == args.partnernumber :
+                client = PapayaClientDistributed(dat = ex_data,
+                                            labs = ex_labels,
+                                            batch_sz = 500,
+                                            num_partners = args.numpartners,
+                                            model_class = TheModel,
+                                            loss_fn = torch.nn.CrossEntropyLoss)
+            i+=1
+        num_epochs_total = 100
+        num_epochs_per_swap = 5
+        num_times = (num_epochs_total // num_epochs_per_swap)
+        key = args.ip + "X" + str(args.presentport)
+        
+        #############################################
+        ####### Training loop #######################
+        
+        for i in range(0, num_times):
+            ### Train model to five epochs  
+            for j in range(0, num_epochs_per_swap):
+                client.model_train_epoch()
+                
+            # Put model state dict in hash table
+            put(loop, key, client.model.state_dict())
             
-            print(" PRINTING HASH TABLE NEIGHBOURS ")
+            #############################
+            ###### partner averaging ####
+            #############################
+            
+            if i > 1 and i < num_times - 1 :
+                keys = []
+                for i in server.bootstrappable_neighbors() :
+                    ip2 = i[0]
+                    port2 = i[1]
+                    keys.append(str(ip2) + "X" + str(port2))
+                # select random sample of keys
+                num_to_select = 3
+                partners = random.sample(keys, num_to_select)
+                client.current_partners = {}
+                for partner_key in partners :
+                    client.current_partners[partner_key] = get(loop, partner_key)
+                for i in range(0, 4) :
+                    client.update_partner_weights()
+                    n.average_partners()
+            
+            ## PRINT THE WHOLE HASH TABLE
+            print(" PRINTING NEIGHBOURS ")
             for i in server.bootstrappable_neighbors() :
                 ip2 = i[0]
                 port2 = i[1]
                 print (ip2 + " is ip and port is " + str(port2))
-                '''
-                keyy = str(i[0]) + "X" + str(i[1])
-                print(" key is " + keyy + " value is " + get(loop, keyy))
-            '''
-            ### GET
-            get_key = input("Input some key")
-            print(" key is " + get_key + " value is " + get(loop, get_key))
+                
+        print(client.logs['stringy'][99])
         
     else:
         create_bootstrap_node(loop, args)
