@@ -101,6 +101,14 @@ def main():
         #############################################
         ####### Training loop #######################
         
+        keys = []
+        for i in server.bootstrappable_neighbors() :
+            ip2 = i[0]
+            port2 = i[1]
+            if ip2 != args.ip and port2 != args.port :
+                keys.append(str(ip2) + "X" + str(port2))
+                print(str(ip2) + "X" + str(port2))
+        
         for i in range(0, num_times):
             ### Train model to five epochs  
             for j in range(0, num_epochs_per_swap):
@@ -116,7 +124,7 @@ def main():
             #############################
             
             if i > 1 and i < num_times - 1 :
-                keys = []
+                #keys = []
                 for i in server.bootstrappable_neighbors() :
                     ip2 = i[0]
                     port2 = i[1]
