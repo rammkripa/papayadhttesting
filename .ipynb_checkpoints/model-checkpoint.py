@@ -4,7 +4,6 @@ class TheModel(torch.nn.Module):
 
     def __init__(self):
         super(TheModel, self).__init__()
-
         self.linear1 = torch.nn.Linear(784, 1)
 
     def forward(self, x):

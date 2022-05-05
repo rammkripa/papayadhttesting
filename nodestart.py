@@ -8,6 +8,7 @@ import torch
 import torchvision
 from model import TheModel
 import numpy as np
+from zlib import compress, decompress
 
 
 from kademlia.network import Server
@@ -52,9 +53,17 @@ def get(loop, key) :
     return loop.run_until_complete(server.get(key))
 
 def bytes_to_state_dict(raw_bytes) :
-    buffer = io.BytesIO(raw_bytes)
-    return torch.load(buffer)
+    decompressed_bytes = decompress(raw_bytes) # decompression
+    buffer = io.BytesIO(decompressed_bytes)
+    state_dict = torch.load(buffer)
+    #print('state dict is  ' + str(state_dict))
+    return state_dict
     
+def strings_to_state_dict(raw_string) :
+    buffer = io.StringIO(raw_string)
+    state_dict = torch.load(buffer)
+    return state_dict
+
 def main():
     
     args = parse_arguments()
@@ -116,21 +125,20 @@ def main():
                 
             # Put model state dict in hash table
             bytesbuffer = io.BytesIO()
-            torch.save(client.model.state_dict(), bytesbuffer)
-            put(loop, key, bytesbuffer.getvalue())
+            
+            torch.save(client.model.half().state_dict(), bytesbuffer)
+            compressed_bytes = compress(bytesbuffer.getvalue(), level = 9)# compression scheme
+            print(str(len(compressed_bytes)) + " is the compressed length and the original length is " + str(len(bytesbuffer.getvalue())))
+            
+            put(loop, key, compressed_bytes)
+            client.model.float()
+            
             
             #############################
             ###### partner averaging ####
             #############################
             
             if i > 1 and i < num_times - 1 :
-                #keys = []
-                for i in server.bootstrappable_neighbors() :
-                    ip2 = i[0]
-                    port2 = i[1]
-                    if ip2 != args.ip and port2 != args.port :
-                        keys.append(str(ip2) + "X" + str(port2))
-                        print(str(ip2) + "X" + str(port2))
                 # LATER: select random sample of keys
                 #num_to_select = 3
                 #partners = random.sample(keys, num_to_select)
@@ -142,7 +150,7 @@ def main():
                 for j in range(0, 4) :
                     randomthing = j + 2
                     client.update_partner_weights()
-                    client.average_partners()
+                client.average_partners()
             
             ## PRINT THE WHOLE HASH TABLE of neighbours
             print(" PRINTING NEIGHBOURS ")
@@ -150,6 +158,10 @@ def main():
                 ip2 = i[0]
                 port2 = i[1]
                 print (ip2 + " is ip and port is " + str(port2))
+                pres_key = str(ip2) + "X" + str(port2)
+                if not (ip2 == args.ip and port2 == args.port) and pres_key not in keys:
+                    keys.append(pres_key)
+                    
         ## MEASURE ACCURACY WRT TEST SET
         accuracies_node = []
         with torch.no_grad():
