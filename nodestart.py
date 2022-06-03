@@ -91,6 +91,7 @@ def main():
         batch_size_test = 500
         train_loader = torch.utils.data.DataLoader(mnist_trainset,batch_size=batch_size_train, shuffle=True)
         test_loader = torch.utils.data.DataLoader(mnist_testset,batch_size=batch_size_test, shuffle=True)
+        ######### Hacky way of setting data ########
         i = 0
         client = None
         for batchno, (ex_data, ex_labels) in enumerate(train_loader):
@@ -102,6 +103,7 @@ def main():
                                             model_class = TheModel,
                                             loss_fn = torch.nn.MSELoss)
             i+=1
+        ##############################################
         num_epochs_total = 20
         num_epochs_per_swap = 5
         num_times = (num_epochs_total // num_epochs_per_swap)
