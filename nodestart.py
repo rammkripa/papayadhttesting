@@ -104,7 +104,7 @@ def main():
                                             loss_fn = torch.nn.MSELoss)
             i+=1
         ##############################################
-        num_epochs_total = 20
+        num_epochs_total = 200
         num_epochs_per_swap = 5
         num_times = (num_epochs_total // num_epochs_per_swap)
         key = args.ip + "X" + str(args.presentport)

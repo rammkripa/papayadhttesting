@@ -18,3 +18,9 @@
 
 1. Port TensorFlow
 2. Train more epochs using built-in function Easy too many loops
+
+### Compression
+
+1. Add pruning and possibly denser serialization
+
+https://pytorch.org/tutorials/intermediate/pruning_tutorial.html Look here for pytorch native pruning see if it helps?
