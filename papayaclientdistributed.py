@@ -170,3 +170,6 @@ class PapayaClientDistributed:
                 sd_curr[key] += self.current_partners[p][key] * weights[p]
         self.model = self.model_class()
         self.model.load_state_dict(sd_curr)
+
+    def prune(self, amt):
+        self.model.prune(amt)
