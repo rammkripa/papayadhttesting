@@ -7,6 +7,8 @@ from papayaclientdistributed import PapayaClientDistributed
 import torch 
 import torchvision
 from model import TheModel
+from model import TheConvModel
+from model import TheLogisticModel
 import numpy as np
 from zlib import compress, decompress
 import torch.nn.utils.prune as prune
@@ -48,10 +50,28 @@ def create_bootstrap_node(loop, args):
     loop.run_until_complete(server.listen(args.presentport))
 
 def put(loop, key, value) :
-    loop.run_until_complete(server.set(key, value))
+    param_dict = {}
+    if len(value) > 7000:
+        for i in range(len(value)//7000 + 1) :
+            curr_vals = value[7000*(i):7000*(i+1)]
+            print('\n\n\n\n\n\n')
+            print(key + 'X' + str(i) + " has length " + str(len(curr_vals)))
+            loop.run_until_complete(server.set(key+'X'+str(i), curr_vals))
+        return ((len(value)//7000) + 1)
+    else :
+        loop.run_until_complete(server.set(key, value))
+        return 0
 
-def get(loop, key) :
-    return loop.run_until_complete(server.get(key))
+def get(loop, key, num_to_get) :
+    if num_to_get != 1 :
+        bytes_arr = b''
+        for i in range(num_to_get) :
+            bytes_arr+=(loop.run_until_complete(server.get(key + 'X' + str(i))))
+        print('\n\n\n\n\n\n')
+        print(len(bytes_arr))
+        return bytes_arr
+    else :
+        return loop.run_until_complete(server.get(key))
 
 def bytes_to_state_dict(raw_bytes) :
     decompressed_bytes = decompress(raw_bytes) # decompression
@@ -98,11 +118,11 @@ def main():
         for batchno, (ex_data, ex_labels) in enumerate(train_loader):
             if i == args.partnernumber :
                 client = PapayaClientDistributed(dat = ex_data,
-                                            labs = ex_labels.float(),
+                                            labs = ex_labels,
                                             batch_sz = 500,
                                             num_partners = args.numpartners,
-                                            model_class = TheModel,
-                                            loss_fn = torch.nn.MSELoss)
+                                            model_class = TheLogisticModel,
+                                            loss_fn = torch.nn.CrossEntropyLoss)
             i+=1
         ##############################################
         num_epochs_total = 200
@@ -130,13 +150,13 @@ def main():
             bytesbuffer = io.BytesIO()
 
             ### PRUNING
-            client.prune(0.3)
+            client.prune(0.2)
 
             model_state_dict = client.model.half().state_dict()
             torch.save(model_state_dict, bytesbuffer)
             compressed_bytes = compress(bytesbuffer.getvalue(), level = 9)# compression scheme
             print(str(len(compressed_bytes)) + " is the compressed length and the original length is " + str(len(bytesbuffer.getvalue())))
-            put(loop, key, compressed_bytes)
+            num_to_get = put(loop, key, compressed_bytes)
             client.model.float()
             
             
@@ -152,7 +172,7 @@ def main():
                 partners = keys
                 client.current_partners = {}
                 for partner_key in partners :
-                    client.current_partners[partner_key] = bytes_to_state_dict(get(loop, partner_key))
+                    client.current_partners[partner_key] = bytes_to_state_dict(get(loop, partner_key, num_to_get))
                 for j in range(0, 4) :
                     randomthing = j + 2
                     client.update_partner_weights()
@@ -172,7 +192,7 @@ def main():
         accuracies_node = []
         with torch.no_grad():
             for batchno, (ex_data, ex_labels) in enumerate(test_loader) :
-                accuracies_node.append(((client.model.forward(ex_data).round() == ex_labels).float().mean()).item())
+                accuracies_node.append(((client.model.forward(ex_data).argmax(dim = 1) == ex_labels).float().mean()).item())
         print('mean accuracy is ' + str(np.array(accuracies_node).mean()))
         #print(client.model.state_dict())
         
